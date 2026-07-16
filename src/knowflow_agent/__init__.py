@@ -1,1 +1,1 @@
-"""Teaching-oriented minimal SWE agent."""
+"""教学型最小 SWE Agent。"""

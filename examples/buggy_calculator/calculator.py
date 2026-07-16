@@ -1,3 +1,3 @@
 def divide(a: float, b: float) -> float:
-    """Return a divided by b."""
+    """返回 a 除以 b 的结果。"""
     return a * b

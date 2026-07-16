@@ -1,25 +1,25 @@
-# Secrets and local configuration
+# 密钥和本地配置
 .env
 AGENTS.md
 
-# Virtual environments
+# 虚拟环境
 .venv/
 venv/
 
-# Local Git worktrees
+# 本地 Git 工作区
 .worktrees/
 
-# Python caches and test artifacts
+# Python 缓存和测试产物
 __pycache__/
 *.py[cod]
 .pytest_cache/
 .coverage
 htmlcov/
 
-# Build artifacts
+# 构建产物
 build/
 dist/
 *.egg-info/
 
-# Disposable teaching demos
+# 一次性教学示例
 work/
