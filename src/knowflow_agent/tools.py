@@ -27,3 +27,19 @@ def read_file(workspace: Path, relative_path: str) -> str:
     # 先定位要读取的文件，再把文件内容作为观察结果返回给 Agent。
     file_path = workspace / relative_path
     return file_path.read_text(encoding="utf-8")
+
+
+def write_file(
+    workspace: Path,
+    relative_path: str,
+    content: str,
+) -> None:
+    """让 Agent 把生成的新代码保存到指定文件。
+
+    作用：Agent 读取并分析代码后，用这个工具把修改结果写回工作区。
+    输入：工作区目录、目标文件的相对路径、要保存的新代码。
+    处理：定位目标文件，再使用 UTF-8 编码覆盖原有内容。
+    结果：目标文件中的旧代码被替换为新代码。
+    """
+    file_path = workspace / relative_path
+    file_path.write_text(content, encoding="utf-8")

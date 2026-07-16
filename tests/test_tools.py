@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from knowflow_agent.tools import list_files, read_file
+from knowflow_agent.tools import list_files, read_file, write_file
 
 
 def test_list_files_returns_sorted_relative_paths(tmp_path: Path) -> None:
@@ -28,3 +28,18 @@ def test_read_file_returns_content(tmp_path: Path) -> None:
 
     # 验证：工具返回的文本与文件中的文本完全相同。
     assert actual_content == "print('你好')"
+
+
+def test_write_file_replaces_content(tmp_path: Path) -> None:
+    """确保 write_file 把 Agent 生成的新代码保存到指定文件。"""
+    # 准备：创建一个包含旧代码的临时文件。
+    file_path = tmp_path / "hello.py"
+    file_path.write_text("print('旧内容')", encoding="utf-8")
+    new_content = "print('新内容')"
+
+    # 执行：把新代码交给 write_file。
+    write_file(tmp_path, "hello.py", new_content)
+
+    # 验证：磁盘中的文件已经变成新代码。
+    actual_content = file_path.read_text(encoding="utf-8")
+    assert actual_content == new_content
