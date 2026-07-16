@@ -152,11 +152,12 @@ Agent 的“循环”。它负责：
 
 `DeepSeekModel` 使用 OpenAI Python SDK，读取环境变量 `DEEPSEEK_API_KEY`，将 `base_url` 设为 `https://api.deepseek.com`，默认模型使用 `deepseek-v4-flash`。模型名可通过 `DEEPSEEK_MODEL` 覆盖，避免以后模型名称变化时修改 Agent 核心代码。
 
-使用非流式 Chat Completions 和官方 Tool Calls 格式。系统提示要求每轮最多选择一个工具。若响应包含多个工具调用或无法解析的参数，当前运行以清楚的协议错误结束，不在 MVP 中实现自动修复协议。
+使用非流式 Chat Completions 和官方 Tool Calls 格式，并通过 `extra_body={"thinking": {"type": "disabled"}}` 关闭思考模式。官方文档说明思考模式默认开启，且工具调用后的后续请求必须回传 `reasoning_content`；MVP 关闭它以避免引入另一套上下文状态。系统提示要求每轮最多选择一个工具。若响应包含多个工具调用或无法解析的参数，当前运行以清楚的协议错误结束，不在 MVP 中实现自动修复协议。
 
 选择依据：截至 2026-07-16，DeepSeek 官方文档展示了 OpenAI SDK、`https://api.deepseek.com` 基础地址和 Tool Calls 用法；官方模型页列出 `deepseek-v4-flash` 和 `deepseek-v4-pro`。参考：
 
 - https://api-docs.deepseek.com/guides/tool_calls
+- https://api-docs.deepseek.com/guides/thinking_mode/
 - https://api-docs.deepseek.com/quick_start/pricing/
 - https://api-docs.deepseek.com/guides/multi_round_chat
 
