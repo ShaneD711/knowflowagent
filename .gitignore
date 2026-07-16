@@ -6,6 +6,9 @@ AGENTS.md
 .venv/
 venv/
 
+# Local Git worktrees
+.worktrees/
+
 # Python caches and test artifacts
 __pycache__/
 *.py[cod]
