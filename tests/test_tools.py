@@ -4,7 +4,7 @@ from knowflow_agent.tools import list_files, read_file
 
 
 def test_list_files_returns_sorted_relative_paths(tmp_path: Path) -> None:
-    """验证工作区中的文件经过 list_files 后变成有序相对路径。"""
+    """确保 list_files 能给 Agent 提供准确、稳定的文件清单。"""
     # 准备：在临时工作区创建两个文件和一个文件夹。
     (tmp_path / "b.py").write_text("", encoding="utf-8")
     (tmp_path / "folder").mkdir()
@@ -18,7 +18,7 @@ def test_list_files_returns_sorted_relative_paths(tmp_path: Path) -> None:
 
 
 def test_read_file_returns_content(tmp_path: Path) -> None:
-    """验证文件路径经过 read_file 后变成文件中的文本。"""
+    """确保 read_file 返回的内容与 Agent 选择的文件完全一致。"""
     # 准备：创建一个临时文件，模拟 Agent 要读取的代码文件。
     file_path = tmp_path / "hello.py"
     file_path.write_text("print('你好')", encoding="utf-8")
