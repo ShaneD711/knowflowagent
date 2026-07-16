@@ -248,6 +248,8 @@ knowflowagent/
 |       `-- test_calculator.py
 |-- tests/
 |   |-- test_agent.py
+|   |-- test_cli.py
+|   |-- test_model.py
 |   `-- test_tools.py
 `-- docs/
     `-- superpowers/
