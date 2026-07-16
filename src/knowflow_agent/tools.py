@@ -1,3 +1,5 @@
+import subprocess
+import sys
 from pathlib import Path
 
 
@@ -43,3 +45,23 @@ def write_file(
     """
     file_path = workspace / relative_path
     file_path.write_text(content, encoding="utf-8")
+
+
+def run_tests(workspace: Path) -> tuple[int, str]:
+    """让 Agent 运行工作区测试并获得测试结果。
+
+    作用：Agent 写入代码后，用这个工具判断修改是否正确。
+    输入：需要运行测试的工作区目录。
+    处理：在工作区中运行固定的 pytest 命令，并收集测试结果。
+    输出：pytest 的退出码和完整输出文本。
+    """
+    result = subprocess.run(
+        [sys.executable, "-m", "pytest", "-q"],
+        cwd=workspace,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    output = result.stdout + result.stderr
+    return result.returncode, output
