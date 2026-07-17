@@ -14,9 +14,13 @@ tools.py 操作文件或运行测试
 执行结果返回给 Agent
 ```
 
-## 动作从 `agent.py` 进入程序
+## `agent.py` 组织决策、执行和观察
 
-`agent.py` 目前只有一个函数 `execute_action(workspace, action)`。`workspace` 表示 Agent 可以操作的工作区，`action` 是模型生成的动作字典。
+`agent.py` 包含模型接口 `Model`、动作执行器 `execute_action` 和反馈循环 `run_agent`。它不直接操作文件，而是连接模型、权限层和工具层。
+
+`Model` 规定模型必须提供 `decide(task, observations)`。当前测试使用可预测的假模型；后续 DeepSeek 也将实现同一接口。因此，更换模型时不需改动 Agent 核心循环。
+
+`execute_action(workspace, action)` 接收模型生成的动作字典。`workspace` 表示 Agent 可以操作的工作区，`action` 包含工具名称和参数。
 
 例如，模型想查看文件时会产生：
 
@@ -50,7 +54,29 @@ tools.write_file
 返回写入结果
 ```
 
-如果工具名称既不是 `list_files`，也不是当前允许的 `write_file`，`execute_action` 会抛出 `PermissionError`。因此，模型可以提出动作，但真正允许执行哪些动作由程序决定。
+如果工具名称不在四个白名单工具中，`execute_action` 会抛出 `PermissionError`。因此，模型可以提出动作，但真正允许执行哪些动作由程序决定。
+
+`run_agent(workspace, task, model, max_steps)` 负责让整个过程持续运行。它先把任务和观察历史交给模型，再把模型返回的动作交给 `execute_action`。成功结果或权限错误都会被转换成观察结果，供模型下一次决策。
+
+```text
+用户任务 + observations
+             ↓
+       model.decide
+             ↓
+          action
+             ↓
+      execute_action
+       ↙             ↘
+  执行成功          权限拒绝
+      ↓                ↓
+ok=True          ok=False
+      ↘             ↙
+      追加到 observations
+             ↓
+       模型再次决策
+```
+
+模型返回 `finish` 时，`run_agent` 返回总结文本。如果模型始终不结束，循环达到 `max_steps` 后会抛出 `RuntimeError`，防止 Agent 无限执行。
 
 ## `permissions.py` 先检查范围，再检查文件类型
 
@@ -113,7 +139,7 @@ list_files        read_file        write_file        run_tests
 
 `tests/test_permissions.py` 直接验证权限层。`test_resolve_workspace_path_rejects_escape` 和 `test_resolve_workspace_path_allows_inside_path` 从拒绝、允许两个方向验证工作区边界；`test_resolve_writable_python_path_rejects_non_python_file` 和 `test_resolve_writable_python_path_allows_python_file` 从拒绝、允许两个方向验证文件类型规则。它回答的问题是：安全规则能否同时挡住错误请求并放行正常请求。
 
-`tests/test_agent.py` 验证模块之间的连接。`test_execute_action_runs_list_files` 和 `test_execute_action_runs_read_file` 确认 Agent 能观察项目；`test_execute_action_runs_write_file` 确认合法写入经过权限检查后能够执行；`test_execute_action_runs_tests` 确认 Agent 能获得测试结果；两个拒绝测试则确认未知工具和非法写入无法进入工具层。
+`tests/test_agent.py` 验证模块之间的连接。前面的测试分别确认四种白名单动作可以执行，未知工具和非法写入会被拒绝。后面的测试使用假模型验证反馈循环：成功结果和权限错误都会返回给模型，模型不结束时会受最大步数限制，完整修复测试则确认 Agent 能按照“列文件、读代码、写代码、跑测试、结束”的数据流工作。
 
 三个测试文件由内向外形成保护：
 

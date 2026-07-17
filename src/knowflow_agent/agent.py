@@ -1,7 +1,25 @@
 from pathlib import Path
+from typing import Protocol
 
 from knowflow_agent import permissions, tools
 
+
+class Model(Protocol):
+    """定义 Agent 核心依赖的模型接口。
+
+    作用：让假模型和未来的 DeepSeek 都能被同一个 Agent 循环调用。
+    输入：用户任务和前面步骤累积的观察结果。
+    处理：具体模型分析当前状态并选择下一步动作。
+    输出：包含工具名称和参数的动作字典。
+    """
+
+    def decide(
+        self,
+        task: str,
+        observations: list[dict[str, object]],
+    ) -> dict[str, str]:
+        """根据任务和已有观察结果返回下一步动作。"""
+        ...
 
 def execute_action(
     workspace: Path,
@@ -48,3 +66,44 @@ def execute_action(
 
     # 没有明确加入白名单的工具，不能进入真正执行操作的工具层。
     raise PermissionError(f"不允许执行工具：{tool_name}")
+
+
+def run_agent(
+    workspace: Path,
+    task: str,
+    model: Model,
+    max_steps: int = 5,
+) -> str:
+    """运行最小 Agent 反馈循环。
+
+    作用：让模型根据工具结果持续选择下一步动作，直到模型决定结束。
+    输入：工作区、用户任务、模型和允许执行的最大步数。
+    处理：请求模型决策，把执行结果或权限错误保存为观察结果，再次请求决策。
+    输出：模型结束任务时提供的总结文本。
+    """
+    observations: list[dict[str, object]] = []
+
+    for _ in range(max_steps):
+        action = model.decide(task, observations)
+
+        if action["tool"] == "finish":
+            return action["summary"]
+
+        try:
+            result = execute_action(workspace, action)
+
+            observation = {
+                "ok": True,
+                "tool": action["tool"],
+                "result": result,
+            }
+        except PermissionError as error:
+            observation = {
+                "ok": False,
+                "tool": action["tool"],
+                "error": str(error),
+            }
+
+        observations.append(observation)
+
+    raise RuntimeError("Agent 达到最大步数仍未结束")
