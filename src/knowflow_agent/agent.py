@@ -1,22 +1,38 @@
 from pathlib import Path
 
-from knowflow_agent import tools
+from knowflow_agent import permissions, tools
 
 
 def execute_action(
     workspace: Path,
     action: dict[str, str],
 ) -> object:
-    """让 Agent 执行经过允许的工具动作。
+    """把模型给出的动作转换成受控制的工具调用。
 
-    作用：接收模型给出的动作，并交给对应的工具执行。
-    输入：工作区目录，以及包含工具名称的动作。
-    处理：读取动作中的工具名称，判断它是否是允许的工具。
-    输出：工具执行后产生的观察结果。
+    作用：连接模型决策和工具执行。模型只能提出动作，不能直接操作文件。
+    输入：允许操作的工作区，以及包含工具名称和参数的动作字典。
+    处理：根据工具名称选择白名单工具；写入文件前必须先经过权限检查。
+    输出：把文件列表或写入结果返回给 Agent，作为下一次决策的观察结果。
+    拒绝：工具不在白名单中时停止执行，不让请求进入工具层。
     """
+    # 模型只提供工具名称；真正调用哪个 Python 函数由执行器决定。
     tool_name = action["tool"]
 
     if tool_name == "list_files":
         return tools.list_files(workspace)
 
-    raise ValueError(f"不允许执行工具：{tool_name}")
+    if tool_name == "write_file":
+        relative_path = action["path"]
+
+        # 写入会改变磁盘，必须先确认路径和文件类型都符合权限规则。
+        permissions.resolve_writable_python_path(workspace, relative_path)
+
+        tools.write_file(
+            workspace,
+            relative_path,
+            action["content"],
+        )
+        return f"已写入文件：{relative_path}"
+
+    # 没有明确加入白名单的工具，不能进入真正执行操作的工具层。
+    raise PermissionError(f"不允许执行工具：{tool_name}")
