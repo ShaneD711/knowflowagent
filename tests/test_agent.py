@@ -64,3 +64,40 @@ def test_execute_action_rejects_non_python_write(tmp_path: Path) -> None:
 
     # 验证：被拒绝后，磁盘中的原有内容没有改变。
     assert file_path.read_text(encoding="utf-8") == "原有内容"
+
+
+def test_execute_action_runs_read_file(tmp_path: Path) -> None:
+    """确保 Agent 检查路径后能够读取工作区内的文件。"""
+    # 准备：创建代码文件，并模拟模型给出的读取动作。
+    file_path = tmp_path / "hello.py"
+    file_path.write_text("print('你好')", encoding="utf-8")
+    action = {
+        "tool": "read_file",
+        "path": "hello.py",
+    }
+
+    # 执行：Agent 接收动作并读取目标文件。
+    observation = execute_action(tmp_path, action)
+
+    # 验证：文件内容作为观察结果返回给 Agent。
+    assert observation == "print('你好')"
+
+
+def test_execute_action_runs_tests(tmp_path: Path) -> None:
+    """确保 Agent 能运行测试并获得测试结果。"""
+    # 准备：创建一个必定通过的临时测试。
+    test_file = tmp_path / "test_example.py"
+    test_file.write_text(
+        "def test_example():\n"
+        "    assert 1 + 1 == 2\n",
+        encoding="utf-8",
+    )
+    action = {"tool": "run_tests"}
+
+    # 执行：Agent 接收动作，并调用固定的测试工具。
+    observation = execute_action(tmp_path, action)
+
+    # 验证：观察结果中包含成功退出码和测试输出。
+    exit_code, output = observation
+    assert exit_code == 0
+    assert "1 passed" in output

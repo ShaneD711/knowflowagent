@@ -103,7 +103,7 @@ list_files        read_file        write_file        run_tests
 了解项目文件  →  读取目标代码  →  保存修改结果  →  验证修改是否正确
 ```
 
-当前 `read_file` 和 `run_tests` 已经在工具层实现并通过测试，但还没有接入 `execute_action`。
+四个工具现在都已经接入 `execute_action`。模型可以提出列文件、读文件、写 Python 文件和运行测试四种动作，执行器负责把动作送到对应工具。
 
 ## 三个测试文件分别守住一层
 
@@ -113,7 +113,7 @@ list_files        read_file        write_file        run_tests
 
 `tests/test_permissions.py` 直接验证权限层。`test_resolve_workspace_path_rejects_escape` 和 `test_resolve_workspace_path_allows_inside_path` 从拒绝、允许两个方向验证工作区边界；`test_resolve_writable_python_path_rejects_non_python_file` 和 `test_resolve_writable_python_path_allows_python_file` 从拒绝、允许两个方向验证文件类型规则。它回答的问题是：安全规则能否同时挡住错误请求并放行正常请求。
 
-`tests/test_agent.py` 验证模块之间的连接。`test_execute_action_runs_list_files` 确认允许的观察动作能够到达工具层；`test_execute_action_rejects_unknown_tool` 确认未知工具被白名单挡住；`test_execute_action_runs_write_file` 确认合法写入经过权限检查后能够执行；`test_execute_action_rejects_non_python_write` 确认非法写入被拒绝，并且磁盘中的原有内容没有改变。
+`tests/test_agent.py` 验证模块之间的连接。`test_execute_action_runs_list_files` 和 `test_execute_action_runs_read_file` 确认 Agent 能观察项目；`test_execute_action_runs_write_file` 确认合法写入经过权限检查后能够执行；`test_execute_action_runs_tests` 确认 Agent 能获得测试结果；两个拒绝测试则确认未知工具和非法写入无法进入工具层。
 
 三个测试文件由内向外形成保护：
 
