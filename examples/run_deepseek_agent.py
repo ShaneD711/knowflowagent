@@ -1,5 +1,4 @@
 import os
-import json
 from pathlib import Path
 from openai import OpenAI
 from knowflow_agent.deepseek_adapter import DeepSeekAdapter
@@ -19,54 +18,36 @@ client = OpenAI(
 
 
 def request_deepseek(
-    task: str,
-    observations: list[dict[str, object]],
+    system_prompt: str,
+    user_prompt: str,
 ) -> str:
-    """把 Agent 的任务和观察历史发送给 DeepSeek，返回动作 JSON 文本。"""
+    """发送适配层准备好的提示文本，并返回 DeepSeek 的响应文本。"""
 
-    # observations 是 Python 对象列表，这里把它转换成可以放进提示词的 JSON 文本。
-    observation_text = json.dumps(observations, ensure_ascii=False)
-
+    # 输入：适配层已经准备好的系统提示词和用户提示词。
+    # 处理：按照 OpenAI SDK 要求组成消息，然后发送给 DeepSeek。
     response = client.chat.completions.create(
         model="deepseek-v4-flash",
         messages=[
-            # 这部分是给模型设定规则
             {
                 "role": "system",
-                "content": (
-                    "你是一个最小 SWE Agent。"
-                    "可用动作只有 list_files 和 finish。"
-                    "当观察历史为空时，必须先使用 list_files。"
-                    "当观察历史中已经有文件列表时，使用 finish。"
-                    'list_files 格式：{"tool": "list_files"}。'
-                    'finish 格式：{"tool": "finish", "summary": "任务总结"}。'
-                    "你必须只输出一个 JSON 对象，不要输出解释。"
-                ),
+                "content": system_prompt,
             },
-            # user 消息
             {
                 "role": "user",
-                "content": (
-                    f"任务：{task}\n"
-                    f"观察历史：{observation_text}\n"
-                    "请选择下一步工具。"
-                ),
+                "content": user_prompt,
             },
         ],
-        # 限制返回格式为 JSON
         response_format={"type": "json_object"},
         max_tokens=100,
-        # 关闭流式输出。模型生成完成后，一次性返回完整响应。
         stream=False,
         extra_body={
-            # 关闭思考模式。
             "thinking": {
                 "type": "disabled",
             }
         },
     )
 
-    # 请求函数只返回 JSON 文本，解析工作交给 DeepSeekAdapter。
+    # 输出：只返回 DeepSeek 生成的 JSON 文本，解析工作由适配层完成。
     response_text = response.choices[0].message.content
 
     if response_text is None:
@@ -75,13 +56,13 @@ def request_deepseek(
     return response_text
 
 
-# 创建 DeepSeek 适配器，把真实请求函数交给它。
+# 创建适配器时只保存请求函数；后续调用 decide 时才会真正发送请求。
 adapter = DeepSeekAdapter(request=request_deepseek)
 
 # 指定 Agent 这次允许观察的工作区。
 workspace = Path("demo").resolve()
 
-# 运行真实反馈循环。
+# 传入工作区，任务，适配器，最大步数，运行真实反馈循环。
 summary = run_agent(
     workspace=workspace,
     task="查看工作区中有哪些文件，然后总结",

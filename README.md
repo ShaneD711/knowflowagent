@@ -47,15 +47,21 @@ action = model.decide(task, observations)
 
 `workspace` 不会直接发送给 DeepSeek。它由 Agent 保留，并在执行动作时传给权限模块和工具模块。
 
-### 3. 模型适配器发送 DeepSeek 请求
+### 3. 模型适配器构造提示文本
 
-这里的 `model` 实际指向 `src/knowflow_agent/deepseek_adapter.py` 中的 `DeepSeekAdapter` 对象。它的 `decide` 方法会调用创建适配器时保存的 `request_deepseek` 函数：
+这里的 `model` 实际指向 `src/knowflow_agent/deepseek_adapter.py` 中的 `DeepSeekAdapter` 对象。它的 `decide` 方法先使用 `json.dumps` 把 Python `observations` 列表转换成 JSON 文本：
 
 ```python
-response_text = self.request(task, observations)
+observation_text = json.dumps(observations, ensure_ascii=False)
 ```
 
-`request_deepseek` 位于 `examples/run_deepseek_agent.py`。它先使用 `json.dumps` 把 Python `observations` 列表转换成 JSON 文本，再把任务、观察历史、可用动作和输出规则组成消息，通过下面的代码发送给 DeepSeek：
+然后，适配器把可用动作和输出规则组成 `system_prompt`，把任务与观察历史组成 `user_prompt`。准备完成后，它才调用创建适配器时保存的请求函数：
+
+```python
+response_text = self.request(system_prompt, user_prompt)
+```
+
+`request_deepseek` 位于 `examples/run_deepseek_agent.py`。它不理解 `task` 和 `observations`，只负责把适配器准备好的两段提示文本交给 OpenAI SDK，再由 SDK 发送给 DeepSeek：
 
 ```python
 client.chat.completions.create(...)
@@ -158,9 +164,10 @@ src/knowflow_agent/agent.py / run_agent
     创建 observations
         ↓
 src/knowflow_agent/deepseek_adapter.py / DeepSeekAdapter.decide
+    把 task 和 observations 转换成 system_prompt 和 user_prompt
         ↓
 examples/run_deepseek_agent.py / request_deepseek
-    把 task 和 observations 发送给 DeepSeek
+    把准备好的提示文本发送给 DeepSeek
         ↓
 DeepSeek 返回动作 JSON 文本
         ↓
