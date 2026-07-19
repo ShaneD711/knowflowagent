@@ -1,7 +1,9 @@
 import os
 import json
+from pathlib import Path
 from openai import OpenAI
 from knowflow_agent.deepseek_adapter import DeepSeekAdapter
+from knowflow_agent.agent import run_agent
 
 # 从当前终端读取 API Key。
 api_key = os.environ.get("DEEPSEEK_API_KEY")
@@ -14,6 +16,7 @@ client = OpenAI(
     api_key=api_key,
     base_url="https://api.deepseek.com",
 )
+
 
 def request_deepseek(
     task: str,
@@ -32,9 +35,12 @@ def request_deepseek(
                 "role": "system",
                 "content": (
                     "你是一个最小 SWE Agent。"
-                    "可用工具只有 list_files。"
-                    "你必须只输出 JSON，不要输出解释。"
-                    'JSON 格式示例：{"tool": "list_files"}'
+                    "可用动作只有 list_files 和 finish。"
+                    "当观察历史为空时，必须先使用 list_files。"
+                    "当观察历史中已经有文件列表时，使用 finish。"
+                    'list_files 格式：{"tool": "list_files"}。'
+                    'finish 格式：{"tool": "finish", "summary": "任务总结"}。'
+                    "你必须只输出一个 JSON 对象，不要输出解释。"
                 ),
             },
             # user 消息
@@ -69,15 +75,18 @@ def request_deepseek(
     return response_text
 
 
-# 把真实请求函数交给模型适配层。
-model = DeepSeekAdapter(request=request_deepseek)
+# 创建 DeepSeek 适配器，把真实请求函数交给它。
+adapter = DeepSeekAdapter(request=request_deepseek)
 
-# DeepSeekAdapter 请求 DeepSeek，并把 JSON 文本转换成动作字典。
-action = model.decide(
-    task="查看工作区中有哪些文件",
-    observations=[],
+# 指定 Agent 这次允许观察的工作区。
+workspace = Path("demo").resolve()
+
+# 运行真实反馈循环。
+summary = run_agent(
+    workspace=workspace,
+    task="查看工作区中有哪些文件，然后总结",
+    model=adapter,
+    max_steps=3,
 )
 
-print(action)
-print(type(action))
-print(action["tool"])
+print(summary)
