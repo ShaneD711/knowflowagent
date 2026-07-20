@@ -23,6 +23,33 @@ def test_deepseek_adapter_converts_response_text_to_action() -> None:
     assert action == {"tool": "list_files"}
 
 
+def test_deepseek_adapter_describes_all_allowed_tools() -> None:
+    """验证系统提示词包含 Agent 允许执行的全部工具。"""
+    received_system_prompts: list[str] = []
+
+    def fake_request(
+        system_prompt: str,
+        user_prompt: str,
+    ) -> str:
+        """保存系统提示词，并返回一个固定的结束动作。"""
+        received_system_prompts.append(system_prompt)
+        return '{"tool": "finish", "summary": "结束测试"}'
+
+    adapter = DeepSeekAdapter(request=fake_request)
+
+    adapter.decide(
+        task="修复项目并运行测试",
+        observations=[],
+    )
+
+    system_prompt = received_system_prompts[0]
+    assert "list_files" in system_prompt
+    assert "read_file" in system_prompt
+    assert "write_file" in system_prompt
+    assert "run_tests" in system_prompt
+    assert "finish" in system_prompt
+
+
 def test_deepseek_adapter_builds_prompts_from_agent_data() -> None:
     """验证适配层将任务和观察记录转换为 DeepSeek 提示文本。"""
 

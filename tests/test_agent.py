@@ -101,8 +101,7 @@ def test_execute_action_runs_tests(tmp_path: Path) -> None:
     """
     test_file = tmp_path / "test_example.py"
     test_file.write_text(
-        "def test_example():\n"
-        "    assert 1 + 1 == 2\n",
+        "def test_example():\n" "    assert 1 + 1 == 2\n",
         encoding="utf-8",
     )
     action = {"tool": "run_tests"}
@@ -175,6 +174,34 @@ def test_run_agent_returns_observation_to_model(tmp_path: Path) -> None:
             }
         ],
     ]
+
+
+def test_run_agent_shows_action_and_observation(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """验证 Agent 可以把每轮动作和观察结果输出到终端。
+
+    Args:
+        tmp_path: pytest 提供的临时工作区路径。
+        capsys: pytest 提供的终端输出捕获器。
+    """
+    (tmp_path / "hello.py").write_text("", encoding="utf-8")
+
+    run_agent(
+        workspace=tmp_path,
+        task="查看项目文件",
+        model=FakeModel(),
+        max_steps=2,
+        show_steps=True,
+    )
+
+    output = capsys.readouterr().out
+
+    assert "动作：" in output
+    assert "list_files" in output
+    assert "观察：" in output
+    assert "hello.py" in output
 
 
 class ForbiddenToolFakeModel:
@@ -315,8 +342,7 @@ class RepairFakeModel:
                 "tool": "write_file",
                 "path": "calculator.py",
                 "content": (
-                    "def multiply(a: int, b: int) -> int:\n"
-                    "    return a * b\n"
+                    "def multiply(a: int, b: int) -> int:\n" "    return a * b\n"
                 ),
             }
 
@@ -347,8 +373,7 @@ def test_run_agent_repairs_project_and_passes_tests(tmp_path: Path) -> None:
     # 临时项目中的实现故意错误，配套测试定义了期望行为。
     calculator_path = tmp_path / "calculator.py"
     calculator_path.write_text(
-        "def multiply(a: int, b: int) -> int:\n"
-        "    return a / b\n",
+        "def multiply(a: int, b: int) -> int:\n" "    return a / b\n",
         encoding="utf-8",
     )
     test_path = tmp_path / "test_calculator.py"
@@ -370,8 +395,7 @@ def test_run_agent_repairs_project_and_passes_tests(tmp_path: Path) -> None:
 
     # 磁盘内容验证写入动作真实生效，而不是只返回成功文本。
     assert calculator_path.read_text(encoding="utf-8") == (
-        "def multiply(a: int, b: int) -> int:\n"
-        "    return a * b\n"
+        "def multiply(a: int, b: int) -> int:\n" "    return a * b\n"
     )
 
     assert summary == "已修复代码并通过测试"

@@ -48,7 +48,7 @@ def request_deepseek(
             },
         ],
         response_format={"type": "json_object"},
-        max_tokens=100,
+        max_tokens=500,
         stream=False,
         extra_body={
             "thinking": {
@@ -75,9 +75,9 @@ workspace = Path("demo").resolve()
 # 从这里启动“决策、执行、观察、再次决策”的真实反馈循环。
 summary = run_agent(
     workspace=workspace,
-    task="查看工作区中有哪些文件，然后总结",
+    task="修复 calculator.py 中的错误，使测试通过",
     model=adapter,
-    max_steps=3,
+    max_steps=8,
 )
 
 print(summary)

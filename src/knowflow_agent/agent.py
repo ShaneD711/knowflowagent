@@ -27,6 +27,7 @@ class Model(Protocol):
         """
         ...
 
+
 def execute_action(
     workspace: Path,
     action: dict[str, str],
@@ -86,6 +87,7 @@ def run_agent(
     task: str,
     model: Model,
     max_steps: int = 5,
+    show_steps: bool = True,
 ) -> str:
     """运行 Agent 的“决策、执行、观察、再决策”反馈循环。
 
@@ -98,6 +100,7 @@ def run_agent(
         task: 用户交给 Agent 的任务描述。
         model: 实现 ``Model`` 接口的模型或模型适配器。
         max_steps: 最多允许模型进行的决策轮数。
+        show_steps: 是否把每轮动作和观察结果输出到终端。
 
     Returns:
         模型通过 ``finish`` 动作提供的任务总结。
@@ -109,6 +112,9 @@ def run_agent(
 
     for _ in range(max_steps):
         action = model.decide(task, observations)
+
+        if show_steps:
+            print(f"动作：{action}")
 
         if action["tool"] == "finish":
             return action["summary"]
@@ -129,5 +135,8 @@ def run_agent(
             }
 
         observations.append(observation)
+
+        if show_steps:
+            print(f"观察：{observation}")
 
     raise RuntimeError("Agent 达到最大步数仍未结束")

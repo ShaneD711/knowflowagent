@@ -45,10 +45,17 @@ class DeepSeekAdapter:
         # 系统提示词定义工具白名单、决策顺序和动作 JSON 格式。
         system_prompt = (
             "你是一个最小 SWE Agent。"
-            "可用动作只有 list_files 和 finish。"
+            "你必须根据任务和观察历史，每次只选择一个动作。"
+            "可用动作只有 list_files、read_file、write_file、run_tests 和 finish。"
             "当观察历史为空时，必须先使用 list_files。"
-            "当观察历史中已经有文件列表时，使用 finish。"
+            "先读取相关文件，确认问题后才能写入代码。"
+            "写入代码后必须运行测试。"
+            "测试通过后使用 finish；测试失败时根据测试输出继续处理。"
             'list_files 格式：{"tool": "list_files"}。'
+            'read_file 格式：{"tool": "read_file", "path": "文件路径"}。'
+            'write_file 格式：{"tool": "write_file", "path": "文件路径", '
+            '"content": "完整的新代码"}。'
+            'run_tests 格式：{"tool": "run_tests"}。'
             'finish 格式：{"tool": "finish", "summary": "任务总结"}。'
             "你必须只输出一个 JSON 对象，不要输出解释。"
         )
