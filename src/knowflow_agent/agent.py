@@ -5,12 +5,10 @@ from knowflow_agent import permissions, tools
 
 
 class Model(Protocol):
-    """定义 Agent 核心依赖的模型接口。
+    """定义 Agent 核心依赖的模型决策接口。
 
-    作用：让假模型和未来的 DeepSeek 都能被同一个 Agent 循环调用。
-    输入：用户任务和前面步骤累积的观察结果。
-    处理：具体模型分析当前状态并选择下一步动作。
-    输出：包含工具名称和参数的动作字典。
+    任何模型或模型适配器只要实现 ``decide``，就可以交给
+    ``run_agent`` 使用。Agent 核心因此不需要了解具体模型或网络 API。
     """
 
     def decide(
@@ -18,22 +16,37 @@ class Model(Protocol):
         task: str,
         observations: list[dict[str, object]],
     ) -> dict[str, str]:
-        """根据任务和已有观察结果返回下一步动作。"""
+        """根据任务和已有观察记录选择下一步动作。
+
+        Args:
+            task: 用户希望 Agent 完成的任务。
+            observations: 之前每一步工具执行成功或失败的结构化记录。
+
+        Returns:
+            包含工具名称及其参数的动作字典。
+        """
         ...
 
 def execute_action(
     workspace: Path,
     action: dict[str, str],
 ) -> object:
-    """把模型给出的动作转换成受控制的工具调用。
+    """验证模型动作，并调用白名单中的对应工具。
 
-    作用：连接模型决策和工具执行。模型只能提出动作，不能直接操作文件。
-    输入：允许操作的工作区，以及包含工具名称和参数的动作字典。
-    处理：根据工具名称选择白名单工具；访问文件前必须先经过权限检查。
-    输出：把工具执行结果返回给 Agent，作为下一次决策的观察结果。
-    拒绝：工具不在白名单中时停止执行，不让请求进入工具层。
+    该函数是模型决策与真实文件操作之间的执行边界。读取和写入文件前
+    会先检查路径权限；未列入白名单的工具不会进入工具层。
+
+    Args:
+        workspace: 本次任务允许访问的工作区根目录。
+        action: 模型返回的动作，包含工具名称及该工具需要的参数。
+
+    Returns:
+        工具产生的结果，例如文件列表、文件内容或测试结果。
+
+    Raises:
+        PermissionError: 请求的工具未获授权，或目标路径不符合权限规则。
     """
-    # 模型只提供工具名称；真正调用哪个 Python 函数由执行器决定。
+    # 模型只选择工具名；执行器负责把它映射到经过授权的 Python 函数。
     tool_name = action["tool"]
 
     if tool_name == "list_files":
@@ -42,7 +55,7 @@ def execute_action(
     if tool_name == "read_file":
         relative_path = action["path"]
 
-        # 读取前先确认目标文件仍然位于工作区内。
+        # 文件读取前先收紧路径范围，避免模型观察工作区外的内容。
         permissions.resolve_workspace_path(workspace, relative_path)
 
         return tools.read_file(workspace, relative_path)
@@ -50,7 +63,7 @@ def execute_action(
     if tool_name == "write_file":
         relative_path = action["path"]
 
-        # 写入会改变磁盘，必须先确认路径和文件类型都符合权限规则。
+        # 文件写入前同时检查工作区边界和允许修改的文件类型。
         permissions.resolve_writable_python_path(workspace, relative_path)
 
         tools.write_file(
@@ -61,10 +74,10 @@ def execute_action(
         return f"已写入文件：{relative_path}"
 
     if tool_name == "run_tests":
-        # 模型只能触发固定测试命令，不能提供任意 Shell 命令。
+        # 只开放固定的 pytest 命令，不接受模型生成的任意 Shell 命令。
         return tools.run_tests(workspace)
 
-    # 没有明确加入白名单的工具，不能进入真正执行操作的工具层。
+    # 默认拒绝白名单之外的工具，防止模型扩张自己的执行权限。
     raise PermissionError(f"不允许执行工具：{tool_name}")
 
 
@@ -74,12 +87,23 @@ def run_agent(
     model: Model,
     max_steps: int = 5,
 ) -> str:
-    """运行最小 Agent 反馈循环。
+    """运行 Agent 的“决策、执行、观察、再决策”反馈循环。
 
-    作用：让模型根据工具结果持续选择下一步动作，直到模型决定结束。
-    输入：工作区、用户任务、模型和允许执行的最大步数。
-    处理：请求模型决策，把执行结果或权限错误保存为观察结果，再次请求决策。
-    输出：模型结束任务时提供的总结文本。
+    每轮先把任务和已有观察记录交给模型。模型可以结束任务，也可以选择
+    一个工具。工具结果或权限错误会被整理成新的观察记录，供下一轮决策
+    使用。
+
+    Args:
+        workspace: Agent 可以观察和操作的工作区根目录。
+        task: 用户交给 Agent 的任务描述。
+        model: 实现 ``Model`` 接口的模型或模型适配器。
+        max_steps: 最多允许模型进行的决策轮数。
+
+    Returns:
+        模型通过 ``finish`` 动作提供的任务总结。
+
+    Raises:
+        RuntimeError: 达到最大决策轮数后模型仍未结束任务。
     """
     observations: list[dict[str, object]] = []
 

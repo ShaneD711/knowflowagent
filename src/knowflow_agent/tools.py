@@ -4,12 +4,13 @@ from pathlib import Path
 
 
 def list_files(workspace: Path) -> list[str]:
-    """让 Agent 获取工作区内可查看的文件清单。
+    """列出工作区内可供 Agent 观察的所有文件。
 
-    作用：Agent 先用这个工具了解项目中有哪些文件，再决定读取哪个文件。
-    输入：允许 Agent 观察的工作区目录。
-    处理：找到工作区中的所有内容，排除文件夹，并转换成相对路径。
-    输出：经过排序的文件路径字符串列表。
+    Args:
+        workspace: 需要遍历的工作区根目录。
+
+    Returns:
+        按名称排序的相对文件路径列表，路径分隔符统一为 ``/``。
     """
     return sorted(
         path.relative_to(workspace).as_posix()
@@ -19,14 +20,19 @@ def list_files(workspace: Path) -> list[str]:
 
 
 def read_file(workspace: Path, relative_path: str) -> str:
-    """让 Agent 获取工作区内指定文件的文本内容。
+    """读取工作区内指定 UTF-8 文件的完整内容。
 
-    作用：Agent 从文件清单中选择一个文件后，用这个工具查看代码内容。
-    输入：工作区目录和要读取的相对文件路径。
-    处理：拼接出文件路径，再使用 UTF-8 编码读取文件。
-    输出：文件中的完整文本。
+    Args:
+        workspace: 目标文件所在的工作区根目录。
+        relative_path: 目标文件相对于工作区的路径。
+
+    Returns:
+        文件中的完整文本。
+
+    Raises:
+        FileNotFoundError: 目标文件不存在。
+        UnicodeDecodeError: 目标文件不是有效的 UTF-8 文本。
     """
-    # 先定位要读取的文件，再把文件内容作为观察结果返回给 Agent。
     file_path = workspace / relative_path
     return file_path.read_text(encoding="utf-8")
 
@@ -36,24 +42,29 @@ def write_file(
     relative_path: str,
     content: str,
 ) -> None:
-    """让 Agent 把生成的新代码保存到指定文件。
+    """使用 UTF-8 编码替换工作区内指定文件的内容。
 
-    作用：Agent 读取并分析代码后，用这个工具把修改结果写回工作区。
-    输入：工作区目录、目标文件的相对路径、要保存的新代码。
-    处理：定位目标文件，再使用 UTF-8 编码覆盖原有内容。
-    结果：目标文件中的旧代码被替换为新代码。
+    Args:
+        workspace: 目标文件所在的工作区根目录。
+        relative_path: 目标文件相对于工作区的路径。
+        content: 需要保存到目标文件的完整文本。
+
+    Returns:
+        None。
     """
     file_path = workspace / relative_path
     file_path.write_text(content, encoding="utf-8")
 
 
 def run_tests(workspace: Path) -> tuple[int, str]:
-    """让 Agent 运行工作区测试并获得测试结果。
+    """在工作区中运行固定的 pytest 命令并收集结果。
 
-    作用：Agent 写入代码后，用这个工具判断修改是否正确。
-    输入：需要运行测试的工作区目录。
-    处理：在工作区中运行固定的 pytest 命令，并收集测试结果。
-    输出：pytest 的退出码和完整输出文本。
+    Args:
+        workspace: 需要运行测试的工作区根目录。
+
+    Returns:
+        二元组 ``(exit_code, output)``。``exit_code`` 是 pytest 退出码，
+        ``output`` 合并了标准输出和标准错误。
     """
     result = subprocess.run(
         [sys.executable, "-m", "pytest", "-q"],

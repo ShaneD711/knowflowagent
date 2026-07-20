@@ -6,31 +6,38 @@ from knowflow_agent.agent import execute_action, run_agent
 
 
 def test_execute_action_runs_list_files(tmp_path: Path) -> None:
-    """确保 Agent 能执行经过允许的 list_files 动作。"""
-    # 准备：创建临时工作区，并模拟 DeepSeek 给出的动作。
+    """验证执行器把 ``list_files`` 动作分派给文件列表工具。
+
+    Args:
+        tmp_path: pytest 提供的临时工作区路径。
+    """
     (tmp_path / "hello.py").write_text("", encoding="utf-8")
     action = {"tool": "list_files"}
 
-    # 执行：Agent 接收动作，再调用对应工具观察工作区。
     observation = execute_action(tmp_path, action)
 
-    # 验证：工具执行结果被作为观察结果返回给 Agent。
+    # execute_action 的返回值会成为 run_agent 传回模型的观察结果。
     assert observation == ["hello.py"]
 
 
 def test_execute_action_rejects_unknown_tool(tmp_path: Path) -> None:
-    """确保 Agent 拒绝执行白名单以外的工具。"""
-    # 准备：模拟模型请求一个没有获得授权的删除工具。
+    """验证执行器拒绝不在工具白名单中的动作。
+
+    Args:
+        tmp_path: pytest 提供的临时工作区路径。
+    """
     action = {"tool": "delete_file"}
 
-    # 执行并验证：执行器必须把它识别为权限错误。
     with pytest.raises(PermissionError, match="不允许执行工具"):
         execute_action(tmp_path, action)
 
 
 def test_execute_action_runs_write_file(tmp_path: Path) -> None:
-    """确保 Agent 检查权限后才能写入 Python 文件。"""
-    # 准备：创建旧代码，并模拟模型给出的写入动作。
+    """验证执行器通过权限检查后写入 Python 文件。
+
+    Args:
+        tmp_path: pytest 提供的临时工作区路径。
+    """
     file_path = tmp_path / "hello.py"
     file_path.write_text("print('旧代码')", encoding="utf-8")
     action = {
@@ -39,17 +46,19 @@ def test_execute_action_runs_write_file(tmp_path: Path) -> None:
         "content": "print('新代码')",
     }
 
-    # 执行：Agent 检查权限，再调用写入工具。
     observation = execute_action(tmp_path, action)
 
-    # 验证：文件已经修改，并且 Agent 获得成功结果。
+    # 同时检查磁盘状态和返回给 Agent 的观察文本。
     assert file_path.read_text(encoding="utf-8") == "print('新代码')"
     assert observation == "已写入文件：hello.py"
 
 
 def test_execute_action_rejects_non_python_write(tmp_path: Path) -> None:
-    """确保 Agent 拒绝写入非 Python 文件，并保留原有内容。"""
-    # 准备：创建一个不允许模型修改的文本文件。
+    """验证执行器拒绝修改非 Python 文件且不破坏原内容。
+
+    Args:
+        tmp_path: pytest 提供的临时工作区路径。
+    """
     file_path = tmp_path / "notes.txt"
     file_path.write_text("原有内容", encoding="utf-8")
     action = {
@@ -58,17 +67,19 @@ def test_execute_action_rejects_non_python_write(tmp_path: Path) -> None:
         "content": "模型生成的新内容",
     }
 
-    # 执行并验证：权限检查必须阻止这次写入。
     with pytest.raises(PermissionError, match="Python 文件"):
         execute_action(tmp_path, action)
 
-    # 验证：被拒绝后，磁盘中的原有内容没有改变。
+    # 权限错误必须发生在写入之前。
     assert file_path.read_text(encoding="utf-8") == "原有内容"
 
 
 def test_execute_action_runs_read_file(tmp_path: Path) -> None:
-    """确保 Agent 检查路径后能够读取工作区内的文件。"""
-    # 准备：创建代码文件，并模拟模型给出的读取动作。
+    """验证执行器通过路径检查后返回工作区文件内容。
+
+    Args:
+        tmp_path: pytest 提供的临时工作区路径。
+    """
     file_path = tmp_path / "hello.py"
     file_path.write_text("print('你好')", encoding="utf-8")
     action = {
@@ -76,16 +87,18 @@ def test_execute_action_runs_read_file(tmp_path: Path) -> None:
         "path": "hello.py",
     }
 
-    # 执行：Agent 接收动作并读取目标文件。
     observation = execute_action(tmp_path, action)
 
-    # 验证：文件内容作为观察结果返回给 Agent。
+    # 读取到的文本会作为观察结果供模型继续决策。
     assert observation == "print('你好')"
 
 
 def test_execute_action_runs_tests(tmp_path: Path) -> None:
-    """确保 Agent 能运行测试并获得测试结果。"""
-    # 准备：创建一个必定通过的临时测试。
+    """验证执行器返回 pytest 的退出码和输出文本。
+
+    Args:
+        tmp_path: pytest 提供的临时工作区路径。
+    """
     test_file = tmp_path / "test_example.py"
     test_file.write_text(
         "def test_example():\n"
@@ -94,20 +107,19 @@ def test_execute_action_runs_tests(tmp_path: Path) -> None:
     )
     action = {"tool": "run_tests"}
 
-    # 执行：Agent 接收动作，并调用固定的测试工具。
     observation = execute_action(tmp_path, action)
 
-    # 验证：观察结果中包含成功退出码和测试输出。
+    # run_tests 的两个返回值共同构成模型看到的测试观察结果。
     exit_code, output = observation
     assert exit_code == 0
     assert "1 passed" in output
 
 
 class FakeModel:
-    """按照固定顺序返回动作，用来测试 Agent 循环。"""
+    """提供可预测决策，用于验证观察结果能否回传给模型。"""
 
     def __init__(self) -> None:
-        # 记录模型每次决策时收到的观察历史，供测试验证数据回传。
+        # 保存每次调用收到的独立快照，避免后续列表修改影响断言。
         self.received_observations: list[list[dict[str, object]]] = []
 
     def decide(
@@ -115,15 +127,20 @@ class FakeModel:
         task: str,
         observations: list[dict[str, object]],
     ) -> dict[str, str]:
-        """第一次要求列文件，获得观察结果后结束。"""
-        # 保存本次收到的观察历史，便于测试检查模型看到的数据。
+        """根据观察历史返回列文件动作或结束动作。
+
+        Args:
+            task: Agent 当前处理的任务描述。
+            observations: 此前工具执行产生的结构化观察记录。
+
+        Returns:
+            首次决策返回 ``list_files``，收到观察记录后返回 ``finish``。
+        """
         self.received_observations.append(observations.copy())
 
-        # 没有观察结果时，先要求 Agent 查看工作区文件。
         if not observations:
             return {"tool": "list_files"}
 
-        # 收到文件列表后，返回 finish 结束这个最小反馈循环。
         return {
             "tool": "finish",
             "summary": "已经看到项目文件",
@@ -131,12 +148,14 @@ class FakeModel:
 
 
 def test_run_agent_returns_observation_to_model(tmp_path: Path) -> None:
-    """确保 Agent 把工具结果返回给模型，再让模型继续决策。"""
-    # 准备：创建临时项目和一个可预测的假模型。
+    """验证 Agent 把工具结果加入历史后再次请求模型决策。
+
+    Args:
+        tmp_path: pytest 提供的临时工作区路径。
+    """
     (tmp_path / "hello.py").write_text("", encoding="utf-8")
     model = FakeModel()
 
-    # 执行：Agent 应该经历“决策、执行、观察、再决策”。
     summary = run_agent(
         workspace=tmp_path,
         task="查看项目中有哪些文件",
@@ -144,7 +163,7 @@ def test_run_agent_returns_observation_to_model(tmp_path: Path) -> None:
         max_steps=2,
     )
 
-    # 验证：模型第二次决策时已经看到了 list_files 的执行结果。
+    # 两次快照展示了“空历史 -> 工具结果写入历史”的完整数据流。
     assert summary == "已经看到项目文件"
     assert model.received_observations == [
         [],
@@ -159,7 +178,7 @@ def test_run_agent_returns_observation_to_model(tmp_path: Path) -> None:
 
 
 class ForbiddenToolFakeModel:
-    """第一次请求禁止工具，收到错误观察后结束。"""
+    """请求未授权工具，用于验证权限错误的反馈数据流。"""
 
     def __init__(self) -> None:
         self.received_observations: list[list[dict[str, object]]] = []
@@ -169,10 +188,17 @@ class ForbiddenToolFakeModel:
         task: str,
         observations: list[dict[str, object]],
     ) -> dict[str, str]:
-        """根据是否收到错误观察结果选择下一步动作。"""
+        """根据观察历史返回未授权动作或结束动作。
+
+        Args:
+            task: Agent 当前处理的任务描述。
+            observations: 此前动作产生的结构化观察记录。
+
+        Returns:
+            首次决策返回 ``delete_file``，收到错误记录后返回 ``finish``。
+        """
         self.received_observations.append(observations.copy())
 
-        # 第一次没有观察结果时，故意请求一个未授权工具。
         if not observations:
             return {"tool": "delete_file"}
 
@@ -183,13 +209,13 @@ class ForbiddenToolFakeModel:
 
 
 def test_run_agent_returns_permission_error_to_model(tmp_path: Path) -> None:
-    """当模型请求了禁止执行的工具，Agent 不应该直接崩溃，而应该把权限错误整理成观察结果，再交回模型。"""
-    # 准备：使用一个会请求禁止工具的假模型。
-    # 它第一次会请求 delete_file，
-    # 第二次看到错误结果后会返回 finish。
+    """验证 Agent 将权限异常转换为模型可读取的错误观察记录。
+
+    Args:
+        tmp_path: pytest 提供的临时工作区路径。
+    """
     model = ForbiddenToolFakeModel()
 
-    # 执行：Agent 应该接住权限错误，再让模型继续决策。
     summary = run_agent(
         workspace=tmp_path,
         task="删除文件",
@@ -197,7 +223,7 @@ def test_run_agent_returns_permission_error_to_model(tmp_path: Path) -> None:
         max_steps=2,
     )
 
-    # 验证：模型第二次决策时已经看到了结构化错误。
+    # 权限异常不会终止循环，而会以失败记录进入下一次决策。
     assert summary == "已经看到权限错误"
     assert model.received_observations == [
         [],
@@ -212,23 +238,33 @@ def test_run_agent_returns_permission_error_to_model(tmp_path: Path) -> None:
 
 
 class NeverFinishFakeModel:
-    """始终请求列出文件，用来验证 Agent 不会无限循环。"""
+    """持续返回工具动作，用于验证 Agent 的最大步数限制。"""
 
     def decide(
         self,
         task: str,
         observations: list[dict[str, object]],
     ) -> dict[str, str]:
-        """每次都返回工具动作，永远不主动结束。"""
+        """始终返回列文件动作。
+
+        Args:
+            task: Agent 当前处理的任务描述。
+            observations: 此前工具执行产生的结构化观察记录。
+
+        Returns:
+            不包含结束信号的 ``list_files`` 动作。
+        """
         return {"tool": "list_files"}
 
 
 def test_run_agent_stops_at_max_steps(tmp_path: Path) -> None:
-    """确保模型一直不结束时，Agent 会在最大步数处停止。"""
-    # 准备：创建一个永远不会返回 finish 的假模型。
+    """验证模型不返回结束动作时 Agent 在最大步数后报错。
+
+    Args:
+        tmp_path: pytest 提供的临时工作区路径。
+    """
     model = NeverFinishFakeModel()
 
-    # 执行并验证：达到两步后必须抛出明确错误，不能无限循环。
     with pytest.raises(RuntimeError, match="最大步数"):
         run_agent(
             workspace=tmp_path,
@@ -239,7 +275,7 @@ def test_run_agent_stops_at_max_steps(tmp_path: Path) -> None:
 
 
 class RepairFakeModel:
-    """根据 Agent 返回的观察结果选择下一步修复动作。"""
+    """按固定修复流程解释观察记录并选择下一步工具。"""
 
     def __init__(self) -> None:
         self.received_observations: list[list[dict[str, object]]] = []
@@ -249,26 +285,31 @@ class RepairFakeModel:
         task: str,
         observations: list[dict[str, object]],
     ) -> dict[str, str]:
-        """观察上一个工具的结果，再决定下一个工具。"""
+        """根据最近一次观察结果推进修复流程。
+
+        Args:
+            task: Agent 当前处理的修复任务描述。
+            observations: 此前工具执行产生的结构化观察记录。
+
+        Returns:
+            当前修复阶段对应的工具动作或结束动作。
+        """
         self.received_observations.append(observations.copy())
 
-        # 第一次还没有观察结果，先要求 Agent 查看工作区有哪些文件。
+        # 空历史表示尚未观察项目，修复流程从获取文件列表开始。
         if not observations:
             return {"tool": "list_files"}
 
-        # observations[-1] 表示取列表中的最后一项。
-        # 也就是获取“最近一次工具执行结果”。
+        # 每个后续动作只依赖最近一次工具执行结果。
         last_observation = observations[-1]
         last_tool = last_observation["tool"]
 
-        # 看到文件列表后，读取需要修复的代码。
         if last_tool == "list_files":
             return {
                 "tool": "read_file",
                 "path": "calculator.py",
             }
 
-        # 看到错误代码后，生成修复后的代码。
         if last_tool == "read_file":
             return {
                 "tool": "write_file",
@@ -279,15 +320,12 @@ class RepairFakeModel:
                 ),
             }
 
-        # 代码写入完成后，运行测试确认修改是否正确。
         if last_tool == "write_file":
             return {"tool": "run_tests"}
 
-        # 最后根据 pytest 的退出码判断测试是否通过。
+        # run_tests 返回 ``(退出码, 输出文本)``；退出码决定最终总结。
         test_result = last_observation["result"]
 
-        # 检查 test_result 是否为元组 tuple，并且元组中的第一个值是否为 0。
-        # 测试进程的退出码为 0 表示通过，非 0 表示失败或发生错误。
         if isinstance(test_result, tuple) and test_result[0] == 0:
             return {
                 "tool": "finish",
@@ -301,16 +339,18 @@ class RepairFakeModel:
 
 
 def test_run_agent_repairs_project_and_passes_tests(tmp_path: Path) -> None:
-    """确保 Agent 能修复错误代码，并根据测试结果结束任务。"""
-    # 准备：创建包含错误代码和真实失败测试的临时项目。
-    # 向 calculator.py 中写入错误代码。
+    """验证 Agent 完成读取、修改、测试和结束的完整修复循环。
+
+    Args:
+        tmp_path: pytest 提供的临时项目路径。
+    """
+    # 临时项目中的实现故意错误，配套测试定义了期望行为。
     calculator_path = tmp_path / "calculator.py"
     calculator_path.write_text(
         "def multiply(a: int, b: int) -> int:\n"
         "    return a / b\n",
         encoding="utf-8",
     )
-    # 创建与错误代码对应的测试文件。
     test_path = tmp_path / "test_calculator.py"
     test_path.write_text(
         "from calculator import multiply\n\n"
@@ -321,7 +361,6 @@ def test_run_agent_repairs_project_and_passes_tests(tmp_path: Path) -> None:
 
     model = RepairFakeModel()
 
-    # 执行：假模型根据每次观察结果选择下一个工具。
     summary = run_agent(
         workspace=tmp_path,
         task="修复计算器，使测试通过",
@@ -329,20 +368,18 @@ def test_run_agent_repairs_project_and_passes_tests(tmp_path: Path) -> None:
         max_steps=5,
     )
 
-    # 验证：错误代码已经被替换成正确代码。
+    # 磁盘内容验证写入动作真实生效，而不是只返回成功文本。
     assert calculator_path.read_text(encoding="utf-8") == (
         "def multiply(a: int, b: int) -> int:\n"
         "    return a * b\n"
     )
 
-    # 验证：Agent 根据测试成功结果结束了任务。
     assert summary == "已修复代码并通过测试"
 
-    # 检查模型最后看到的工具结果是否为 run_tests。
+    # 最后一条观察记录连接了真实 pytest 结果和模型的结束决策。
     last_observation = model.received_observations[-1][-1]
     assert last_observation["tool"] == "run_tests"
 
-    # 检查 pytest 的退出码和输出文本。
     test_result = last_observation["result"]
     assert isinstance(test_result, tuple)
     assert test_result[0] == 0
